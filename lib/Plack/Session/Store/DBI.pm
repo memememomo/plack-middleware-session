@@ -39,11 +39,14 @@ sub _dbh {
 sub fetch {
     my ($self, $session_id) = @_;
     my $table_name = $self->{table_name};
-    my $dbh = $self->_dbh;
-    my $sth = $dbh->prepare_cached("SELECT session_data FROM $table_name WHERE id = ?");
-    $sth->execute( $session_id );
-    my ($data) = $sth->fetchrow_array();
-    $sth->finish;
+    my $data;
+    eval {
+        my $dbh = $self->_dbh;
+        my $sth = $dbh->prepare_cached("SELECT session_data FROM $table_name WHERE id = ?");
+        $sth->execute( $session_id );
+        ($data) = $sth->fetchrow_array();
+        $sth->finish;
+    };
     return $data ? $self->deserializer->( $data ) : ();
 }
 
@@ -51,35 +54,38 @@ sub store {
     my ($self, $session_id, $session) = @_;
     my $table_name = $self->{table_name};
 
-    # XXX To be honest, I feel like there should be a transaction 
-    # call here.... but Catalyst didn't have it, so I'm not so sure
+    eval {
+        # XXX To be honest, I feel like there should be a transaction 
+        # call here.... but Catalyst didn't have it, so I'm not so sure
 
-    my $sth = $self->_dbh->prepare_cached("SELECT 1 FROM $table_name WHERE id = ?");
-    $sth->execute($session_id);
+        my $sth = $self->_dbh->prepare_cached("SELECT 1 FROM $table_name WHERE id = ?");
+        $sth->execute($session_id);
 
-    # need to fetch. on some DBD's execute()'s return status and
-    # rows() is not reliable
-    my ($exists) = $sth->fetchrow_array(); 
+        # need to fetch. on some DBD's execute()'s return status and
+        # rows() is not reliable
+        my ($exists) = $sth->fetchrow_array(); 
 
-    $sth->finish;
-    
-    if ($exists) {
-        my $sth = $self->_dbh->prepare_cached("UPDATE $table_name SET session_data = ? WHERE id = ?");
-        $sth->execute( $self->serializer->($session), $session_id );
-    }
-    else {
-        my $sth = $self->_dbh->prepare_cached("INSERT INTO $table_name (id, session_data) VALUES (?, ?)");
-        $sth->execute( $session_id , $self->serializer->($session) );
-    }
-    
+        $sth->finish;
+        
+        if ($exists) {
+            my $sth = $self->_dbh->prepare_cached("UPDATE $table_name SET session_data = ? WHERE id = ?");
+            $sth->execute( $self->serializer->($session), $session_id );
+        }
+        else {
+            my $sth = $self->_dbh->prepare_cached("INSERT INTO $table_name (id, session_data) VALUES (?, ?)");
+            $sth->execute( $session_id , $self->serializer->($session) );
+        }
+    };
 }
 
 sub remove {
     my ($self, $session_id) = @_;
     my $table_name = $self->{table_name};
-    my $sth = $self->_dbh->prepare_cached("DELETE FROM $table_name WHERE id = ?");
-    $sth->execute( $session_id );
-    $sth->finish;
+    eval {
+        my $sth = $self->_dbh->prepare_cached("DELETE FROM $table_name WHERE id = ?");
+        $sth->execute( $session_id );
+        $sth->finish;
+    };
 }
 
 1;
